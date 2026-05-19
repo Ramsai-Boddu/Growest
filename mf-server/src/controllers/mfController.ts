@@ -212,9 +212,20 @@ export const investFund = async (req: Request, res: Response): Promise<void> => 
     }
 };
 
-export const createSip = async (req: Request, res: Response): Promise<void> => {
+export const createSip = async (
+    req: Request,
+    res: Response
+): Promise<void> => {
+
     try {
-        const { customerRef, schemeCode, sipAmount, startDate } = req.body;
+
+        const {
+            customerRef,
+            schemeCode,
+            sipAmount,
+            startDate
+        } = req.body;
+
         const customerResult = await pool.query(
             `
             SELECT *
@@ -225,12 +236,15 @@ export const createSip = async (req: Request, res: Response): Promise<void> => {
         );
 
         if (customerResult.rows.length === 0) {
+
             res.status(404).json({
                 success: false,
                 message: "Customer not found"
             });
+
             return;
         }
+
         const schemeResult = await pool.query(
             `
             SELECT *
@@ -249,6 +263,7 @@ export const createSip = async (req: Request, res: Response): Promise<void> => {
 
             return;
         }
+
         const navResult = await pool.query(
             `
             SELECT
@@ -300,6 +315,28 @@ export const createSip = async (req: Request, res: Response): Promise<void> => {
             ]
         );
 
+        await pool.query(
+            `
+            INSERT INTO mf_transactions(
+                customer_ref,
+                scheme_code,
+                transaction_type,
+                amount,
+                units,
+                nav_value
+            )
+            VALUES($1,$2,$3,$4,$5,$6)
+            `,
+            [
+                customerRef,
+                schemeCode,
+                "SIP_CREATED",
+                sipAmount,
+                estimatedUnits,
+                latestNav
+            ]
+        );
+
         res.status(201).json({
             success: true,
             latestNav,
@@ -309,7 +346,9 @@ export const createSip = async (req: Request, res: Response): Promise<void> => {
         });
 
     } catch (error) {
+
         console.log(error);
+
         res.status(500).json({
             success: false,
             message: "SIP creation failed"
@@ -317,9 +356,15 @@ export const createSip = async (req: Request, res: Response): Promise<void> => {
     }
 };
 
-export const stopSip = async (req: Request, res: Response): Promise<void> => {
+export const stopSip = async (
+    req: Request,
+    res: Response
+): Promise<void> => {
+
     try {
+
         const { id } = req.params;
+
         const sipResult = await pool.query(
             `
             SELECT *
@@ -359,6 +404,28 @@ export const stopSip = async (req: Request, res: Response): Promise<void> => {
             WHERE id = $1
             `,
             [id]
+        );
+
+        await pool.query(
+            `
+            INSERT INTO mf_transactions(
+                customer_ref,
+                scheme_code,
+                transaction_type,
+                amount,
+                units,
+                nav_value
+            )
+            VALUES($1,$2,$3,$4,$5,$6)
+            `,
+            [
+                sip.customer_ref,
+                sip.scheme_code,
+                "SIP_STOPPED",
+                0,
+                0,
+                0
+            ]
         );
 
         res.status(200).json({

@@ -1,7 +1,7 @@
 import express from "express";
 import authMiddleware from "../middleware/authMiddleware";
 import roleMiddleware from "../middleware/roleMiddleware";
-import { getAllInvestors, getAllLogs, toggleInvestorStatus } from "../controllers/adminController";
+import { addInvestor, getAllInvestors, getAllLogs, toggleInvestorStatus, updateFundNav, updateStockPrice } from "../controllers/adminController";
 const router = express.Router();
 
 router.get(
@@ -23,6 +23,27 @@ router.get(
     authMiddleware,
     roleMiddleware(["ADMIN"]),
     getAllLogs
+);
+
+router.post(
+    "/market/stocks/update-price",
+    authMiddleware,
+    roleMiddleware(["ADMIN"]),
+    updateStockPrice
+);
+
+router.post(
+    "/market/funds/update-nav",
+    authMiddleware,
+    roleMiddleware(["ADMIN"]),
+    updateFundNav
+);
+
+router.post(
+    "/addinvestor",
+    authMiddleware,
+    roleMiddleware(["ADMIN"]),
+    addInvestor
 );
 
 export default router;
