@@ -1,5 +1,5 @@
 import express from "express";
-import {getInvestorDetails, getPortfolio} from "../controllers/portfolioController";
+import {getAllTransactions, getInvestorDetails, getPortfolio} from "../controllers/portfolioController";
 import authMiddleware from "../middleware/authMiddleware";
 import roleMiddleware from "../middleware/roleMiddleware";
 import rateLimiter from "../middleware/rateLimiter";
@@ -19,5 +19,12 @@ router.get(
     authMiddleware,
     getInvestorDetails
 );
+
+router.get(
+    "/transactions/:investorId",
+    authMiddleware,
+    getAllTransactions
+);
+
 
 export default router;

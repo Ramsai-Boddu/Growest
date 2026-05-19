@@ -1,6 +1,6 @@
 import express from "express";
 
-import {buyStock, getStocks, getTransactions, sellStock} from "../controllers/equityController";
+import {buyStock, getAllStocks, getStockBySymbol, getStockHistory, getStocks, getTransactions, sellStock} from "../controllers/equityController";
 
 const router = express.Router();
 
@@ -8,5 +8,8 @@ router.get("/stocks/:investorId",getStocks);
 router.get("/transactions/:investorId",getTransactions);
 router.post("/buy",buyStock);
 router.post("/sell",sellStock);
+router.get("/stock-history/:stockSymbol",getStockHistory);
+router.get("/market/stocks",getAllStocks);
+router.get("/market/stocks/:stockSymbol",getStockBySymbol);
 
 export default router;

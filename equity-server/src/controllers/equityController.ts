@@ -1,9 +1,9 @@
-import {Request,Response} from "express";
+import { Request, Response } from "express";
 import pool from "../config/db";
 
-export const getStocks = async (req: Request,res: Response): Promise<void> => {
+export const getStocks = async (req: Request, res: Response): Promise<void> => {
     try {
-        const {investorId} = req.params;
+        const { investorId } = req.params;
         const investorQuery = `
             SELECT *
             FROM equity_users
@@ -33,8 +33,8 @@ export const getStocks = async (req: Request,res: Response): Promise<void> => {
             );
         res.status(200).json({
             success: true,
-            investor:investorResult.rows[0],
-            holdings:holdingsResult.rows
+            investor: investorResult.rows[0],
+            holdings: holdingsResult.rows
         });
     } catch (error) {
         console.log(error);
@@ -45,13 +45,19 @@ export const getStocks = async (req: Request,res: Response): Promise<void> => {
     }
 };
 
-export const getTransactions = async (req: Request,res: Response): Promise<void> => {
+export const getTransactions = async (
+    req: Request,
+    res: Response
+): Promise<void> => {
 
     try {
-        const {investorId} = req.params;
+
+        const { investorId } =
+            req.params;
+
         const investorQuery = `
             SELECT *
-            FROM equity_users
+            FROM unified_investors
             WHERE investor_id = $1
         `;
 
@@ -61,19 +67,43 @@ export const getTransactions = async (req: Request,res: Response): Promise<void>
                 [investorId]
             );
 
-        if (investorResult.rows.length === 0) {
+        if (
+            investorResult.rows.length === 0
+        ) {
+
             res.status(404).json({
                 success: false,
-                message: "Investor not found"
+                message:
+                    "Investor not found"
             });
+
             return;
         }
-        const transactionQuery = `
-            SELECT *
-            FROM equity_transactions
-            WHERE investor_id = $1
 
-            ORDER BY executed_at DESC
+        const investor =
+            investorResult.rows[0];
+
+        const transactionQuery = `
+            SELECT
+                et.id,
+                et.stock_symbol,
+
+                sm.company_name,
+
+                et.transaction_type,
+                et.quantity,
+                et.price,
+                et.realized_gain,
+                et.executed_at
+
+            FROM equity_transactions et
+
+            JOIN stock_master sm
+            ON et.stock_symbol = sm.stock_symbol
+
+            WHERE et.investor_id = $1
+
+            ORDER BY et.executed_at DESC
         `;
 
         const transactionResult =
@@ -81,30 +111,46 @@ export const getTransactions = async (req: Request,res: Response): Promise<void>
                 transactionQuery,
                 [investorId]
             );
+
         res.status(200).json({
             success: true,
-            investor:investorResult.rows[0],
-            transactions:transactionResult.rows
+
+            investor: {
+                investorId:
+                    investor.investor_id,
+
+                fullName:
+                    investor.full_name,
+
+                pan:
+                    investor.pan_number
+            },
+
+            totalTransactions:
+                transactionResult.rows.length,
+
+            transactions:
+                transactionResult.rows
         });
 
     } catch (error) {
+
         console.log(error);
+
         res.status(500).json({
             success: false,
-            message: "Failed to fetch transactions"
+            message:
+                "Failed to fetch transactions"
         });
     }
 };
 
 export const buyStock = async (req: Request,res: Response): Promise<void> => {
     try {
-
         const {
             investorId,
             stockSymbol,
-            quantity,
-            price,
-            exchange
+            quantity
         } = req.body;
 
         const investorQuery = `
@@ -119,12 +165,57 @@ export const buyStock = async (req: Request,res: Response): Promise<void> => {
         );
 
         if (investorResult.rows.length === 0) {
+
             res.status(404).json({
                 success: false,
                 message: "Investor not found"
             });
+
             return;
         }
+
+        const stockQuery = `
+            SELECT
+                sm.stock_symbol,
+                sm.company_name,
+                sm.exchange,
+                sph.price
+
+            FROM stock_master sm
+
+            JOIN stock_price_history sph
+            ON sm.stock_symbol = sph.stock_symbol
+
+            WHERE sm.stock_symbol = $1
+
+            ORDER BY sph.recorded_at DESC
+
+            LIMIT 1
+        `;
+
+        const stockResult = await pool.query(
+            stockQuery,
+            [stockSymbol]
+        );
+
+        if (stockResult.rows.length === 0) {
+
+            res.status(404).json({
+                success: false,
+                message: "Stock not found"
+            });
+
+            return;
+        }
+
+        const stock =
+            stockResult.rows[0];
+
+        const currentPrice =
+            Number(stock.price);
+
+        const exchange =
+            stock.exchange;
 
         const existingHoldingQuery = `
             SELECT *
@@ -143,21 +234,35 @@ export const buyStock = async (req: Request,res: Response): Promise<void> => {
             const holding =
                 existingHoldingResult.rows[0];
 
+            const oldQuantity =
+                Number(holding.quantity);
+
+            const oldAvgPrice =
+                Number(holding.avg_buy_price);
+
             const newQuantity =
-                Number(holding.quantity) +
-                Number(quantity);
+                oldQuantity + Number(quantity);
+
+            const newAvgPrice =
+                (
+                    (oldQuantity * oldAvgPrice)
+                    +
+                    (Number(quantity) * currentPrice)
+                ) / newQuantity;
 
             await pool.query(
                 `
                 UPDATE equity_holdings
                 SET quantity = $1,
-                    current_market_price = $2,
+                    avg_buy_price = $2,
+                    current_market_price = $3,
                     updated_at = NOW()
-                WHERE id = $3
+                WHERE id = $4
                 `,
                 [
                     newQuantity,
-                    price,
+                    newAvgPrice,
+                    currentPrice,
                     holding.id
                 ]
             );
@@ -180,8 +285,8 @@ export const buyStock = async (req: Request,res: Response): Promise<void> => {
                     investorId,
                     stockSymbol,
                     quantity,
-                    price,
-                    price,
+                    currentPrice,
+                    currentPrice,
                     exchange
                 ]
             );
@@ -205,13 +310,16 @@ export const buyStock = async (req: Request,res: Response): Promise<void> => {
                 stockSymbol,
                 "BUY",
                 quantity,
-                price,
+                currentPrice,
                 0
             ]
         );
 
         res.status(201).json({
             success: true,
+            stockSymbol,
+            quantity,
+            executedPrice: currentPrice,
             message: "Stock purchased successfully"
         });
 
@@ -226,16 +334,12 @@ export const buyStock = async (req: Request,res: Response): Promise<void> => {
     }
 };
 
-export const sellStock = async (req: Request,res: Response): Promise<void> => {
+export const sellStock = async (req: Request, res: Response): Promise<void> => {
     try {
-
-        const {
-            investorId,
+        const { investorId,
             stockSymbol,
-            quantity,
-            sellPrice
+            quantity
         } = req.body;
-
         const holdingQuery = `
             SELECT *
             FROM equity_holdings
@@ -249,10 +353,12 @@ export const sellStock = async (req: Request,res: Response): Promise<void> => {
         );
 
         if (holdingResult.rows.length === 0) {
+
             res.status(404).json({
                 success: false,
                 message: "Holding not found"
             });
+
             return;
         }
 
@@ -263,12 +369,41 @@ export const sellStock = async (req: Request,res: Response): Promise<void> => {
             Number(quantity) >
             Number(holding.quantity)
         ) {
+
             res.status(400).json({
                 success: false,
                 message: "Insufficient quantity"
             });
+
             return;
         }
+
+        const stockQuery = `
+            SELECT
+                price
+            FROM stock_price_history
+            WHERE stock_symbol = $1
+            ORDER BY recorded_at DESC
+            LIMIT 1
+        `;
+
+        const stockResult = await pool.query(
+            stockQuery,
+            [stockSymbol]
+        );
+
+        if (stockResult.rows.length === 0) {
+
+            res.status(404).json({
+                success: false,
+                message: "Stock price not found"
+            });
+
+            return;
+        }
+
+        const currentPrice =
+            Number(stockResult.rows[0].price);
 
         const remainingQuantity =
             Number(holding.quantity) -
@@ -276,7 +411,7 @@ export const sellStock = async (req: Request,res: Response): Promise<void> => {
 
         const realizedGain =
             (
-                Number(sellPrice) -
+                currentPrice -
                 Number(holding.avg_buy_price)
             ) * Number(quantity);
 
@@ -302,7 +437,7 @@ export const sellStock = async (req: Request,res: Response): Promise<void> => {
                 `,
                 [
                     remainingQuantity,
-                    sellPrice,
+                    currentPrice,
                     holding.id
                 ]
             );
@@ -326,13 +461,16 @@ export const sellStock = async (req: Request,res: Response): Promise<void> => {
                 stockSymbol,
                 "SELL",
                 quantity,
-                sellPrice,
+                currentPrice,
                 realizedGain
             ]
         );
 
         res.status(200).json({
             success: true,
+            stockSymbol,
+            quantity,
+            executedPrice: currentPrice,
             realizedGain,
             message: "Stock sold successfully"
         });
@@ -344,6 +482,151 @@ export const sellStock = async (req: Request,res: Response): Promise<void> => {
         res.status(500).json({
             success: false,
             message: "Stock sell failed"
+        });
+    }
+};
+
+export const getStockHistory = async (req: Request, res: Response): Promise<void> => {
+    try {
+        const { stockSymbol } = req.params;
+
+        const historyQuery = `
+            SELECT
+                price,
+                recorded_at
+            FROM stock_price_history
+            WHERE stock_symbol = $1
+            ORDER BY recorded_at ASC
+        `;
+
+        const historyResult = await pool.query(
+            historyQuery,
+            [stockSymbol]
+        );
+
+        res.status(200).json({
+            success: true,
+            stockSymbol,
+            history: historyResult.rows
+        });
+
+    } catch (error) {
+
+        console.log(error);
+
+        res.status(500).json({
+            success: false,
+            message: "Failed to fetch stock history"
+        });
+    }
+};
+
+export const getAllStocks = async (req: Request,res: Response): Promise<void> => {
+    try {
+        const stockQuery = `
+            SELECT
+                sm.stock_symbol,
+                sm.company_name,
+                sm.exchange,
+                sm.sector,
+
+                sph.price,
+                sph.recorded_at
+
+            FROM stock_master sm
+
+            JOIN (
+                SELECT DISTINCT ON (stock_symbol)
+                    stock_symbol,
+                    price,
+                    recorded_at
+                FROM stock_price_history
+                ORDER BY stock_symbol, recorded_at DESC
+            ) sph
+
+            ON sm.stock_symbol = sph.stock_symbol
+
+            ORDER BY sm.company_name ASC
+        `;
+
+        const stockResult =
+            await pool.query(stockQuery);
+
+        res.status(200).json({
+            success: true,
+            totalStocks:
+                stockResult.rows.length,
+            stocks:
+                stockResult.rows
+        });
+
+    } catch (error) {
+        console.log(error);
+        res.status(500).json({
+            success: false,
+            message:
+                "Failed to fetch stocks"
+        });
+    }
+};
+
+export const getStockBySymbol = async (req: Request,res: Response): Promise<void> => {
+    try {
+        const { stockSymbol } =
+            req.params;
+        const stockQuery = `
+            SELECT
+                sm.*,
+
+                sph.price,
+                sph.recorded_at
+
+            FROM stock_master sm
+
+            JOIN (
+                SELECT DISTINCT ON (stock_symbol)
+                    stock_symbol,
+                    price,
+                    recorded_at
+                FROM stock_price_history
+                ORDER BY stock_symbol, recorded_at DESC
+            ) sph
+
+            ON sm.stock_symbol = sph.stock_symbol
+
+            WHERE sm.stock_symbol = $1
+        `;
+
+        const stockResult =
+            await pool.query(
+                stockQuery,
+                [stockSymbol]
+            );
+
+        if (
+            stockResult.rows.length === 0
+        ) {
+
+            res.status(404).json({
+                success: false,
+                message:
+                    "Stock not found"
+            });
+
+            return;
+        }
+
+        res.status(200).json({
+            success: true,
+            stock:
+                stockResult.rows[0]
+        });
+    } catch (error) {
+        console.log(error);
+        res.status(500).json({
+            success: false,
+            message:
+                "Failed to fetch stock"
         });
     }
 };

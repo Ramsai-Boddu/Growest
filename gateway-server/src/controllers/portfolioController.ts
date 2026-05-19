@@ -189,3 +189,85 @@ export const getInvestorDetails = async (req: Request,res: Response): Promise<vo
         });
     }
 };
+
+export const getAllTransactions = async (
+    req: Request,
+    res: Response
+): Promise<void> => {
+
+    try {
+
+        const { investorId } =
+            req.params;
+
+        const investorResult =
+            await pool.query(
+                `
+                SELECT *
+                FROM unified_investors
+                WHERE investor_id = $1
+                `,
+                [investorId]
+            );
+
+        if (
+            investorResult.rows.length === 0
+        ) {
+
+            res.status(404).json({
+                success: false,
+                message:
+                    "Investor not found"
+            });
+
+            return;
+        }
+
+        const investor =
+            investorResult.rows[0];
+
+        const customerRef =
+            investor.customer_ref;
+
+        const stockResponse =
+            await axios.get(
+                `http://localhost:4001/equity/transactions/${investorId}`
+            );
+
+        const mfResponse =
+            await axios.get(
+                `http://localhost:4002/mf/transactions/${customerRef}`
+            );
+
+        res.status(200).json({
+            success: true,
+
+            investor: {
+                investorId:
+                    investor.investor_id,
+
+                customerRef:
+                    investor.customer_ref,
+
+                fullName:
+                    investor.full_name
+            },
+
+            stockTransactions:
+                stockResponse.data.transactions,
+
+            mfTransactions:
+                mfResponse.data.transactions
+        });
+
+    } catch (error) {
+
+        console.log(error);
+
+        res.status(500).json({
+            success: false,
+            message:
+                "Failed to fetch transactions"
+        });
+    }
+};

@@ -3,7 +3,9 @@ import cors from "cors";
 import portfolioRoutes from "./routes/portfolioRoutes";
 import authRoutes from "./routes/authRoutes";
 import testRoutes from "./routes/testRoutes";
+import adminRoutes from "./routes/adminRoutes";
 import auditMiddleware from "./middleware/auditMiddleware";
+import buyRoutes from "./routes/buyRoutes";
 
 
 const app = express();
@@ -15,6 +17,8 @@ app.use(auditMiddleware("GATEWAY_SERVICE"));
 app.use("/auth", authRoutes);
 app.use("/test", testRoutes);
 app.use("/portfolio",portfolioRoutes);
+app.use("/bs",buyRoutes)
+app.use("/admin",adminRoutes)
 
 app.listen(4000, () => {
     console.log("Gateway server running on port 4000");
