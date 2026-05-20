@@ -1,3 +1,4 @@
+import axios from "axios";
 import pool from "../config/db";
 import { Request, Response } from "express";
 
@@ -583,5 +584,44 @@ export const addInvestor = async (
     } finally {
 
         client.release();
+    }
+};
+
+export const getAllPortfolioTransactions = async (
+    req: Request,
+    res: Response
+): Promise<void> => {
+
+    try {
+
+        const stockResponse =
+            await axios.get(
+                "http://localhost:4001/equity/transactions"
+            );
+
+        const mfResponse =
+            await axios.get(
+                "http://localhost:4002/mf/transactions"
+            );
+
+        res.status(200).json({
+            success: true,
+
+            stockTransactions:
+                stockResponse.data.transactions,
+
+            mfTransactions:
+                mfResponse.data.transactions
+        });
+
+    } catch (error) {
+
+        console.log(error);
+
+        res.status(500).json({
+            success: false,
+            message:
+                "Failed to fetch transactions"
+        });
     }
 };

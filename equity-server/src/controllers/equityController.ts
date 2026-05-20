@@ -630,3 +630,65 @@ export const getStockBySymbol = async (req: Request,res: Response): Promise<void
         });
     }
 };
+
+export const getAllTransactions = async (
+    req: Request,
+    res: Response
+): Promise<void> => {
+
+    try {
+
+        const transactionQuery = `
+            SELECT
+                et.id,
+                et.investor_id,
+
+                eu.full_name,
+
+                et.stock_symbol,
+
+                sm.company_name,
+
+                et.transaction_type,
+                et.quantity,
+                et.price,
+                et.realized_gain,
+                et.executed_at
+
+            FROM equity_transactions et
+
+            JOIN equity_users eu
+            ON et.investor_id = eu.investor_id
+
+            JOIN stock_master sm
+            ON et.stock_symbol = sm.stock_symbol
+
+            ORDER BY et.executed_at DESC
+        `;
+
+        const transactionResult =
+            await pool.query(
+                transactionQuery
+            );
+
+        res.status(200).json({
+            success: true,
+
+            totalTransactions:
+                transactionResult.rows.length,
+
+            transactions:
+                transactionResult.rows
+        });
+
+    } catch (error) {
+
+        console.log(error);
+
+        res.status(500).json({
+            success: false,
+            message:
+                "Failed to fetch transactions"
+        });
+    }
+};

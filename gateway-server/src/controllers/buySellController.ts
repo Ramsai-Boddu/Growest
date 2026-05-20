@@ -163,9 +163,7 @@ export const getStockBySymbol = async (
 
     try {
 
-        const { stockSymbol } =
-            req.params;
-
+        const { stockSymbol } = req.params;
         const response =
             await axios.get(
                 `http://localhost:4001/equity/market/stocks/${stockSymbol}`

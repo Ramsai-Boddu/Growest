@@ -1,5 +1,5 @@
 import express from "express";
-import {createSip, getAllFunds, getFundByScheme, getFunds,getMfTransactions,getNavHistory,getSipHistory, getSipsById, investFund, stopSip} from "../controllers/mfController";
+import {createSip, getAllFunds, getAllMfTransactions, getFundByScheme, getFunds,getMfTransactions,getNavHistory,getSipHistory, getSipsById, investFund, stopSip} from "../controllers/mfController";
 
 const router = express.Router();
 
@@ -15,6 +15,10 @@ router.get("/market/funds/:schemeCode",getFundByScheme);
 router.get(
     "/transactions/:investorId",
     getMfTransactions
+);
+router.get(
+    "/transactions",
+    getAllMfTransactions
 );
 
 export default router;

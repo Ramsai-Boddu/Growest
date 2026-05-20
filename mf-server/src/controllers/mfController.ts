@@ -523,25 +523,35 @@ export const getSipHistory = async (req: Request, res: Response): Promise<void> 
 export const getAllFunds = async (req: Request, res: Response): Promise<void> => {
     try {
         const fundQuery = `
-            SELECT
-    ms.scheme_code,
-    ms.scheme_name,
-    ms.amc_name,
-    ms.fund_category,
-    ms.risk_category,
+    SELECT
+        ms.scheme_code,
+        ms.scheme_name,
+        ms.amc_name,
+        ms.fund_category,
+        ms.risk_category,
 
-    mnh.nav_value,
-    mnh.nav_date
+        latest_nav.nav_value,
+        latest_nav.nav_date
 
-FROM mf_schemes ms
+    FROM mf_schemes ms
 
-JOIN mf_nav_history mnh
-ON ms.scheme_code = mnh.scheme_code
+    JOIN (
+        SELECT DISTINCT ON (scheme_code)
+            scheme_code,
+            nav_value,
+            nav_date
 
-ORDER BY
-    ms.scheme_code,
-    mnh.nav_date DESC
-        `;
+        FROM mf_nav_history
+
+        ORDER BY
+            scheme_code,
+            nav_date DESC
+    ) latest_nav
+
+    ON ms.scheme_code = latest_nav.scheme_code
+
+    ORDER BY ms.scheme_name ASC
+`;
         const fundResult =
             await pool.query(fundQuery);
         res.status(200).json({
@@ -702,6 +712,70 @@ export const getMfTransactions = async (
                 fullName:
                     investor.full_name
             },
+
+            totalTransactions:
+                transactionResult.rows.length,
+
+            transactions:
+                transactionResult.rows
+        });
+
+    } catch (error) {
+
+        console.log(error);
+
+        res.status(500).json({
+            success: false,
+            message:
+                "Failed to fetch MF transactions"
+        });
+    }
+};
+
+export const getAllMfTransactions = async (
+    req: Request,
+    res: Response
+): Promise<void> => {
+
+    try {
+
+        const transactionQuery = `
+            SELECT
+                mt.id,
+                ui.investor_id,
+
+                ui.full_name,
+
+                mt.customer_ref,
+
+                mt.scheme_code,
+
+                ms.scheme_name,
+
+                mt.transaction_type,
+                mt.amount,
+                mt.units,
+                mt.nav_value,
+                mt.created_at
+
+            FROM mf_transactions mt
+
+            JOIN mf_schemes ms
+            ON mt.scheme_code = ms.scheme_code
+
+            JOIN unified_investors ui
+            ON mt.customer_ref = ui.customer_ref
+
+            ORDER BY mt.created_at DESC
+        `;
+
+        const transactionResult =
+            await pool.query(
+                transactionQuery
+            );
+
+        res.status(200).json({
+            success: true,
 
             totalTransactions:
                 transactionResult.rows.length,
