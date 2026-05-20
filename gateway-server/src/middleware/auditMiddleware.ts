@@ -1,5 +1,13 @@
-import { Request, Response, NextFunction } from "express";
+import {
+    Request,
+    Response,
+    NextFunction
+} from "express";
+
 import pool from "../config/db";
+
+import { UAParser }
+    from "ua-parser-js";
 
 const auditMiddleware = (
     serviceName: string
@@ -11,62 +19,101 @@ const auditMiddleware = (
         next: NextFunction
     ): void => {
 
-        const startTime = Date.now();
+        const startTime =
+            Date.now();
 
-        res.on("finish", async () => {
+        res.on(
+            "finish",
 
-            try {
+            async () => {
 
-                const responseTime =
-                    Date.now() - startTime;
+                try {
 
-                await pool.query(
-                    `
-                    INSERT INTO audit_logs(
-                        investor_pan,
-                        service_name,
-                        action,
-                        endpoint,
-                        request_method,
-                        ip_address,
-                        status_code,
-                        response_time_ms,
-                        success
-                    )
-                    VALUES(
-                        $1,$2,$3,$4,$5,
-                        $6,$7,$8,$9
-                    )
-                    `,
-                    [
-                        req.user?.investorId || null,
+                    const responseTime =
+                        Date.now() -
+                        startTime;
 
-                        serviceName,
+                    const parser =
+                        new UAParser(
+                            req.headers[
+                            "user-agent"
+                            ]
+                        );
 
-                        `${req.method} ${req.originalUrl}`,
+                    const uaResult =
+                        parser.getResult();
 
-                        req.originalUrl,
+                    const browser =
+                        uaResult.browser.name ||
+                        "Unknown";
 
-                        req.method,
+                    const os =
+                        uaResult.os.name ||
+                        "Unknown";
 
-                        req.ip,
+                    const device =
+                        uaResult.device.type ||
+                        "Desktop";
 
-                        res.statusCode,
+                    const ipAddress =
+                        (
+                            req.headers[
+                            "x-forwarded-for"
+                            ] as string
+                        )?.split(",")[0]
 
-                        responseTime,
+                        ||
 
-                        res.statusCode < 400
-                    ]
-                );
+                        req.socket.remoteAddress
 
-            } catch (error) {
+                        ||
 
-                console.log(
-                    "Audit Log Error",
-                    error
-                );
+                        req.ip
+
+                        ||
+
+                        "Unknown";
+
+                    await pool.query(
+                        `
+    INSERT INTO audit_logs(
+        service_name,
+        action,
+        endpoint,
+        request_method,
+        ip_address,
+        status_code,
+        response_time_ms,
+        success,
+        created_at
+    )
+    VALUES(
+        $1,$2,$3,$4,
+        $5,$6,$7,$8,
+        NOW()
+    )
+    `,
+                        [
+                            serviceName,
+                            `${req.method} ${req.originalUrl}`,
+                            req.originalUrl,
+                            req.method,
+                            ipAddress,
+                            res.statusCode,
+                            responseTime,
+                            res.statusCode < 400
+                        ]
+                    );
+
+                } catch (error) {
+
+                    console.log(
+                        "Audit Log Error",
+                        error
+                    );
+                }
             }
-        });
+        );
 
         next();
     };
