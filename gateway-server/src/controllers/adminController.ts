@@ -625,3 +625,184 @@ export const getAllPortfolioTransactions = async (
         });
     }
 };
+
+export const createStock = async (
+    req: Request,
+    res: Response
+): Promise<void> => {
+
+    try {
+
+        const {
+            stockSymbol,
+            companyName,
+            exchange,
+            sector,
+            price
+        } = req.body;
+
+        const existingStock =
+            await pool.query(
+                `
+                SELECT *
+                FROM stock_master
+                WHERE stock_symbol = $1
+                `,
+                [stockSymbol]
+            );
+
+        if (
+            existingStock.rows.length > 0
+        ) {
+
+            res.status(400).json({
+                success: false,
+                message:
+                    "Stock already exists"
+            });
+
+            return;
+        }
+
+        await pool.query(
+            `
+            INSERT INTO stock_master(
+                stock_symbol,
+                company_name,
+                exchange,
+                sector
+            )
+            VALUES($1,$2,$3,$4)
+            `,
+            [
+                stockSymbol,
+                companyName,
+                exchange,
+                sector
+            ]
+        );
+
+        await pool.query(
+            `
+            INSERT INTO stock_price_history(
+                stock_symbol,
+                price,
+                recorded_at
+            )
+            VALUES($1,$2,NOW())
+            `,
+            [
+                stockSymbol,
+                price
+            ]
+        );
+
+        res.status(201).json({
+            success: true,
+            message:
+                "Stock created successfully"
+        });
+
+    } catch (error) {
+
+        console.log(error);
+
+        res.status(500).json({
+            success: false,
+            message:
+                "Failed to create stock"
+        });
+    }
+};
+
+export const createFund = async (
+    req: Request,
+    res: Response
+): Promise<void> => {
+
+    try {
+
+        const {
+            schemeCode,
+            schemeName,
+            amcName,
+            fundCategory,
+            riskCategory,
+            navValue
+        } = req.body;
+
+        const existingFund =
+            await pool.query(
+                `
+                SELECT *
+                FROM mf_schemes
+                WHERE scheme_code = $1
+                `,
+                [schemeCode]
+            );
+
+        if (
+            existingFund.rows.length > 0
+        ) {
+
+            res.status(400).json({
+                success: false,
+                message:
+                    "Fund already exists"
+            });
+
+            return;
+        }
+
+        await pool.query(
+            `
+            INSERT INTO mf_schemes(
+                scheme_code,
+                scheme_name,
+                amc_name,
+                fund_category,
+                risk_category
+            )
+            VALUES($1,$2,$3,$4,$5)
+            `,
+            [
+                schemeCode,
+                schemeName,
+                amcName,
+                fundCategory,
+                riskCategory
+            ]
+        );
+
+        await pool.query(
+            `
+            INSERT INTO mf_nav_history(
+                scheme_code,
+                nav_value,
+                nav_date
+            )
+            VALUES($1,$2,CURRENT_DATE)
+            `,
+            [
+                schemeCode,
+                navValue
+            ]
+        );
+
+        res.status(201).json({
+            success: true,
+            message:
+                "Fund created successfully"
+        });
+
+    } catch (error) {
+
+        console.log(error);
+
+        res.status(500).json({
+            success: false,
+            message:
+                "Failed to create fund"
+        });
+    }
+};
